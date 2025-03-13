@@ -1,1 +1,600 @@
-Hello World
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <title>RCM vs HRRR Forecasts at Leading Time of 13 to 36 Hours </title>
+    <style>
+        body {
+            text-align: center;
+            font-family: Arial, sans-serif;
+        }
+        .top-row {
+            display: flex;
+            justify-content: space-around; /* Distributes space between items */
+            align-items: center;
+            width: 100%;
+            max-width: 1200px;
+            padding-bottom: 20px;
+            margin: 0 auto; /* Center the top-row itself */
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-template-rows: repeat(2, 1fr);
+            gap: 10px;
+            width: fit-content;
+            padding-left: 100px;
+        }
+
+        .iso-time {
+            padding-left: 0px;
+        }        
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            grid-template-rows: repeat(1, 1fr);
+            gap: 0px;
+            justify-content: center;
+            align-items: center;
+            max-width: 1000px;
+            margin: auto;
+            margin-bottom: 0px; /* Reduce bottom margin */
+        }
+        .gallery img {
+            width: 100%;
+            height: auto;
+            max-width: 450px;
+        }
+
+        .difference {
+            display: flex;
+            grid-template-columns: auto repeat(4, 1fr); /* auto for colorbar, then 2 images */
+            grid-template-rows: 1fr;
+            gap: 0px; /* Adjust for desired spacing */
+            justify-content: center;
+            align-items: center;
+            max-width: 1000px;
+            margin: auto;
+            margin-top: 0; /* Reduce bottom margin */
+            margin-bottom: 0px; /* Reduce bottom margin */
+        }
+        .difference img {
+            width: 100%;
+            height: auto;
+            max-width: 450px;
+            margin-left: 0px; 
+        }
+        #chartContainer {
+            width: 720px;
+            height: 360px;
+            display: flex;
+            justify-content: center; /* Center horizontally */
+            align-items: center; /* Center vertically */
+            margin: auto; /* Center the div itself */
+            margin-top: -80px; /* Reduce bottom margin */
+        }
+        #textinfo{
+            font-size: small;
+            grid-column: 3 / 5;
+            text-align: left;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="top-row">
+        <div class="controls">
+            <button onclick="changeDay(-1)">Previous Day</button>
+            <button onclick="changeDay(1)">Next Day</button>
+            <input type="date" id="datePicker" onchange="setDate()">
+            <select id="hourPicker" onchange="setHour()"></select>
+            <button id="decreaseHourButton" onclick="changeHour(-1)">Previous Hour</button>
+            <button id="increaseHourButton" onclick="changeHour(1)">Next Hour</button>
+            <text id="textinfo"> <!-- will generate text by JavaScript-->> </text>
+        </div>
+        <div class="iso-time" id="isoTime"></div>
+    </div>
+
+    <div class="gallery" id="imageGallery">
+        <!-- Images will be injected here by JavaScript -->
+    </div>
+    <div class="difference" id="imageDiff">
+        <!-- Images will be injected here by JavaScript -->
+    </div>
+    <div class="chart", id="chartContainer" style="width: 720px; height: 360px;">
+        <canvas id="myChart"></canvas>
+    </div>
+    
+    <script>
+        // Get current time
+        const nowDate = new Date(); 
+        const nowChartDate = getChartDate(nowDate);
+        //const minAvailDate = new Date(Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate() - 10, 1, 0, 0, 0));
+        const minAvailDate = new Date(Date.UTC(2025, 2, 1, 1, 0, 0, 0));
+        const maxAvailDate = getMaxAvailDate(nowDate);
+
+
+        // Get display time
+        let currentDate = new Date(nowChartDate);
+        currentDate.setDate(nowChartDate.getDate() - 1);
+
+        let chartDate = getChartDate(nowDate);
+
+        let errorsBase = [];
+        let errorsNew = [];
+
+        const ctx = document.getElementById('myChart').getContext('2d');
+        let chart;
+
+        const labels = ["fcst", "pred", "anl"];
+        const difflabels = ["hadiff", "radiff"];
+
+
+        function getNewYorkTimeString(date) {
+            const options = {
+                timeZone: 'America/New_York',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                timeZoneName: 'short',
+                hour12: false  // Forces 24-hour format
+            };
+            const formatter = new Intl.DateTimeFormat('en-US', options);
+            let formatted = formatter.format(date);
+            let parts = formatter.formatToParts(date);
+            let timeZoneName = parts.find(part => part.type === 'timeZoneName').value;
+            // Reformat to YYYY-MM-DD HH:MM (EST/EDT)
+            let year = parts.find(part => part.type === 'year').value;
+            let month = parts.find(part => part.type === 'month').value;
+            let day = parts.find(part => part.type === 'day').value;
+            let hour = parts.find(part => part.type === 'hour').value;
+            let minute = parts.find(part => part.type === 'minute').value;
+
+            return `${year}-${month}-${day} ${hour}H (${timeZoneName})`;
+        }
+
+        
+        function getMaxAvailDate(date) {
+            let endDate;
+            if (date.getUTCHours() > 13) {
+                endDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 2, 0, 0, 0, 0));
+            } else {
+                endDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1, 0, 0, 0, 0));
+            }
+            return endDate;
+        }
+
+        function getChartDate(date) {
+            // Set chartDate to 1:00 AM on the date of (currentDate - 1 hour)
+            let tempDate = new Date(date.getTime() - 60 * 60 * 1000); // Subtract 1 hour
+            let chartDate = new Date(Date.UTC(tempDate.getUTCFullYear(), tempDate.getUTCMonth(), tempDate.getUTCDate(), 1, 0, 0, 0));
+            return chartDate
+        }
+
+        function updateISOTime() {
+            if (!currentDate) return;
+
+            let modelRunDate = new Date(chartDate);
+            modelRunDate.setHours(modelRunDate.getHours() - 13);
+            // Format the output string
+            let output = `Forecast valid at: ${currentDate.toISOString().slice(0, 16)} (${getNewYorkTimeString(currentDate)})<br>` +
+                         `Model run at:  ${modelRunDate.toISOString().slice(0, 16)} (${getNewYorkTimeString(modelRunDate)})`;
+
+            document.getElementById("isoTime").innerHTML = output;
+            document.getElementById("isoTime").style.whiteSpace = "nowrap";
+        }
+
+
+        function getImagePath(date, label) {
+            const year = date.getUTCFullYear();
+            const month = String(date.getUTCMonth() + 1).padStart(2, '0'); // Months are 0-indexed
+            const day = String(date.getUTCDate()).padStart(2, '0');
+            const hours = String(date.getUTCHours()).padStart(2, '0');
+
+            return `images/${year}-${month}-${day}T${hours}-${label}.png`;
+        }
+
+        function loadImages(anl_ready) {
+            const gallery = document.getElementById("imageGallery");
+            gallery.innerHTML = "";
+            
+            const colorbar = document.createElement("img");
+            colorbar.src = `images/colorbar.png`;
+            colorbar.style.height = '220px'
+            colorbar.style.width = '61px'
+
+            gallery.appendChild(colorbar);
+            labels.forEach(label => {
+                const img = document.createElement("img");
+
+                if (label === "anl" && (!anl_ready)) {
+                    img.src = "images/missing_anl.png";
+                } else { 
+                    img.src = getImagePath(currentDate, label);
+                }
+                img.alt = img.src;
+                img.style.width = '300px'
+                img.style.height = '270px'
+                gallery.appendChild(img);
+            });
+
+            const map = document.createElement("img");
+            map.src = `images/forecast_map.png`;
+            map.style.paddingLeft = "20px"
+            map.style.width = '300px'
+            map.style.height = '270px'
+            gallery.appendChild(map);
+        }
+
+        function loadDifferences(need_rendering) {
+            const diff = document.getElementById("imageDiff");
+            diff.innerHTML = "";
+            if (!need_rendering) {
+                diff.style.display = "none";
+                return;
+            }
+            
+            diff.style.display = "flex"; 
+
+            const diffcolorbar = document.createElement("img");
+            diffcolorbar.src = `images/diff_colorbar.png`;
+            diffcolorbar.style.height = '220px'
+            //diffcolorbar.style.width = '40px'
+            diff.appendChild(diffcolorbar);
+        
+            difflabels.forEach(label => {
+                const img = document.createElement("img");
+                img.src = getImagePath(currentDate, label);
+                img.alt = img.src 
+                img.style.width = '300px';
+                img.style.height = '270px';
+                diff.appendChild(img);
+            });
+
+            const improvcolorbar = document.createElement("img");
+            improvcolorbar.src = `images/improv_colorbar.png`;
+            improvcolorbar.style.height = '220px'
+            improvcolorbar.style.paddingLeft = '80px'
+            //improvcolorbar.style.width = '72px'
+            diff.appendChild(improvcolorbar);
+
+            const img = document.createElement("img");
+            img.src = getImagePath(currentDate, "improv");
+            img.alt = img.src 
+            img.style.width = '300px';
+            img.style.height = '270px';
+            img.style.marginTop = '5px'; 
+            diff.appendChild(img);
+        
+        }
+
+        window.onload = function() {
+            document.getElementById("textinfo").innerHTML = 'Data available from ' + 
+                                                           minAvailDate.toISOString().slice(0, 13) + 
+                                                           'H <br> to ' + maxAvailDate.toISOString().slice(0, 13) + 'H';
+
+            setDateRange(minAvailDate, maxAvailDate);
+            if (currentDate < minAvailDate) {
+                currentDate.setTime(minAvailDate);
+            }
+            if (currentDate > maxAvailDate) {
+                currentDate.setTime(maxAvailDate);
+            }
+            
+            // update the date and hour pickers
+            document.getElementById("datePicker").value = currentDate.toISOString().split('T')[0];
+            setHourRange(currentDate)
+            document.getElementById("hourPicker").value = currentDate.getUTCHours();
+
+            // the page can and should be updated when currentDate is set 
+            updatePage();
+        };
+
+        function changeDay(direction) {
+            currentDate.setUTCDate(currentDate.getUTCDate() + direction);
+            if (currentDate < minAvailDate) {
+                currentDate.setTime(minAvailDate);
+            }
+            if (currentDate > maxAvailDate) {
+                currentDate.setTime(maxAvailDate);
+            }
+
+            document.getElementById("datePicker").value = currentDate.toISOString().split('T')[0];
+            setHourRange(currentDate)
+            document.getElementById("hourPicker").value = currentDate.getUTCHours();
+
+            // the page can and should be updated when currentDate is set 
+            updatePage();
+
+        }
+
+        function changeHour(direction) {
+            currentDate.setUTCHours(currentDate.getUTCHours() + direction)
+            if (currentDate < minAvailDate) {
+                currentDate.setTime(minAvailDate);
+            }
+            if (currentDate > maxAvailDate) {
+                currentDate.setTime(maxAvailDate);
+            }
+            document.getElementById("datePicker").value = currentDate.toISOString().split('T')[0];
+            setHourRange(currentDate)
+            document.getElementById("hourPicker").value = currentDate.getUTCHours();
+
+            // the page can and should be updated when currentDate is set 
+            updatePage();
+        }
+
+       
+        // Function to set the selected hour when changed
+        function setHour() {
+            const hourValue = document.getElementById("hourPicker").value;
+            currentDate.setUTCHours(parseInt(hourValue));
+            if (currentDate < minAvailDate) {
+                currentDate.setTime(minAvailDate);
+            }
+            if (currentDate > maxAvailDate) {
+                currentDate.setTime(maxAvailDate);
+            }
+            // the page can and should be updated when currentDate is set 
+            updatePage();
+        }
+        
+        // Ensure the selected date updates correctly
+        function setDate() {
+            const dateValue = document.getElementById("datePicker").value;
+            if (dateValue) {
+                // get new date and update the hour menu 
+                const newDate = new Date(dateValue);
+                setHourRange(newDate)
+
+                // update the current time
+                currentDate = new Date(Date.UTC(newDate.getUTCFullYear(), newDate.getUTCMonth(), 
+                                                newDate.getUTCDate(), 
+                                                currentDate.getUTCHours(), 0, 0, 0)); // 12:00:00 UTC
+                if (currentDate < minAvailDate) {
+                    currentDate.setTime(minAvailDate);
+                }
+                if (currentDate > maxAvailDate) {
+                    currentDate.setTime(maxAvailDate);
+                }
+                
+                // update selected hour 
+                document.getElementById("hourPicker").value = currentDate.getUTCHours();
+
+                // the page can and should be updated when currentDate is set 
+                updatePage();
+            }
+        }
+
+        function updatePage() {
+
+            updateISOTime();
+
+            filename = getImagePath(currentDate, 'anl')
+            fetch(filename, { method: 'HEAD' })
+            .then(response => {
+                if (response.ok) {
+                    loadImages(true);
+                    console.log("analysis exist")
+                    loadDifferences(true);
+                    updateChart(true);
+                } else {
+                    loadImages(false);
+                    loadDifferences(false);
+                    updateChart(false);
+                }
+            })
+            .catch(error => {
+                console.error('Error checking image:', filename, error);
+            });
+        }
+ 
+
+        function createChart() {
+            const hourLabels = [...Array(23).keys()].map(h => String(h + 1).padStart(2, '0') + 'H').concat(['00H+1']);
+            let modelRunDate = new Date(chartDate);
+            modelRunDate.setHours(modelRunDate.getHours() - 13);
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: Array.from({ length: 24 }, (_, i) => i),
+                    datasets: [
+                        {
+                            label: 'HRRR MAE',
+                            data: errorsBase,
+                            borderColor: 'blue',
+                            fill: false,
+                            segment: {
+                                borderColor: (ctx) => ctx.p0DataIndex < (currentDate - chartDate) / (3600 * 1000) ? 'blue' : 'LightGray',
+                            },
+                            pointBackgroundColor: (ctx) => ctx.dataIndex < ((currentDate - chartDate) / (3600 * 1000) + 1) ? 'blue' : 'LightGray', // Corrected Point Color
+                            pointStyle: 'circle',
+                            pointBorderWidth: 0, // Set border width to 0
+                            pointRadius: 4,
+                            pointHoverRadius: 5,
+                            pointHoverBackgroundColor: 'black',
+                        },
+                        {
+                            label: 'RCM MAE',
+                            data: errorsNew,
+                            borderColor: 'gold',
+                            fill: false,
+                            segment: {
+                                borderColor: (ctx) => ctx.p0DataIndex < (currentDate - chartDate) / (3600 * 1000) ? 'gold' : 'LightGray',
+                            },
+                            pointBackgroundColor: (ctx) => ctx.dataIndex < ((currentDate - chartDate) / (3600 * 1000) + 1) ? 'gold' : 'LightGray', // Corrected Point Color
+                            pointStyle: 'circle',
+                            pointBorderWidth: 0, // Set border width to 0
+                            pointRadius: 4,
+                            pointHoverRadius: 5,
+                            pointHoverBackgroundColor: 'black',
+                        },
+                    ],
+                },
+                options: {
+                    animation: false,
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'MAE of forecasts valid from ' + chartDate.toISOString().slice(0, 13) + 'H to 00H next day. \n Models run at ' + modelRunDate.toISOString().slice(0, 13) + '.', 
+                                color: 'black',
+                                font: {
+                                    size: 16 // Increase font size here
+                                },
+                                padding: { top: 10 } // Optional: Add spacing above the title
+                            },
+                            grid: {
+                                color: 'WhiteSmoke'
+                            },
+                            ticks: {
+                                callback: (val, index) => hourLabels[index], // Ensure correct tick labels
+                                color: 'black', 
+                            },
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'MAE',
+                                color: 'black',
+                                font: {
+                                    size: 16 // Increase font size here
+                                },
+                            },
+                            ticks: {
+                                color: 'black', 
+                                stepSize: 0.2,
+                            },
+                            min: 0.5, // Set the minimum value of the y-axis
+                            max: 2.5, // Set the maximum value of the y-axis
+                            grid: {
+                                color: 'WhiteSmoke'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                usePointStyle: true,
+                                generateLabels: function(chart) {
+                                    const data = chart.data;
+                                    if (data.datasets.length) {
+                                        return data.datasets.map(function(dataset, i) {
+                                            return {
+                                                text: dataset.label,
+                                                fillStyle: dataset.borderColor,
+                                                strokeStyle: dataset.borderColor,
+                                                lineWidth: 2, // Thin line
+                                                datasetIndex: i,
+                                                pointStyle: 'line', // Show a dot
+                                            };
+                                        });
+                                    }
+                                    return [];
+                                }, 
+                                padding: 100 // Increase padding between labels
+                            }
+                        }
+                    }
+                },
+            });
+        }
+        
+        function updateChart(need_rendering) {
+
+            // does not need rendering
+            if (!need_rendering) {
+                if (chart) {
+                    chart.destroy(); // Destroy the existing chart if it exists
+                    chart = null;
+                }
+                return
+            }
+
+            let sameDay = chartDate && 0 <= (currentDate - chartDate) && (currentDate - chartDate) < 24 * 60 * 60 * 1000
+            if (chart && sameDay) {
+                // No need to reload the data 
+                chartDate = getChartDate(currentDate)
+                chart.update();
+            } else {
+                // More than 24 hours or first call
+
+                chartDate = getChartDate(currentDate);
+                let modelRunDate = new Date(chartDate);
+                modelRunDate.setHours(modelRunDate.getHours() - 13);
+                let dateStr = modelRunDate.toISOString().slice(0, 13);
+                let filename = `errors/mae_${dateStr}.json`;
+                fetch(filename)
+                    .then(response => response.json())
+                    .then(data => {
+                        const sortedIndices = data.leading_hours.map((_, i) => i) // Create index array
+                            .sort((a, b) => data.leading_hours[a] - data.leading_hours[b]); // Sort indices based on leading_hours
+
+                        const sorted_hrrr_mae = sortedIndices.map(i => data.hrrr_mae[i]);
+                        const sorted_rcm_mae = sortedIndices.map(i => data.rcm_mae[i]);
+                        const sorted_leading_hours = sortedIndices.map(i => data.leading_hours[i]);
+
+                        errorsBase.length = 0; // Clear existing array
+                        errorsBase.push(...sorted_hrrr_mae); // Copy new data into it
+                        errorsNew.length = 0; 
+                        errorsNew.push(...sorted_rcm_mae);
+
+                        if(chart){
+                            chart.update();
+                        } else {
+                            createChart();
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error loading data:', error);
+                        if (chart) {
+                            chart.destroy(); // Destroy the existing chart if it exists
+                            chart = null;
+                        }
+                    });
+                }
+            }
+
+        function setDateRange(minAvailDate, maxAvailDate) {
+            const datePicker = document.getElementById("datePicker");
+            const minDateStr = minAvailDate.toISOString().split('T')[0];
+            const maxDateStr = maxAvailDate.toISOString().split('T')[0];
+            datePicker.min = minDateStr;
+            datePicker.max = maxDateStr;
+        }
+
+
+
+        function setHourRange(selectedDate) {
+            // Hour Range
+            const hourPicker = document.getElementById("hourPicker");
+            hourPicker.innerHTML = ""; // Clear existing options
+
+            for (let i = 0; i < 24; i++) {
+                const option = document.createElement("option");
+                option.value = i;
+                option.textContent = i.toString().padStart(2, '0') + ":00";
+
+                const currentDate = new Date(selectedDate);
+                currentDate.setUTCHours(i);
+
+                if (currentDate >= minAvailDate && currentDate <= maxAvailDate) {
+                    hourPicker.appendChild(option);
+                } else {
+                    option.disabled = true; // Disable unavailable hours
+                    option.style.color = "gray"; // Make unavailable hours gray
+                    hourPicker.appendChild(option);
+                }
+            }
+        }
+
+    </script>
+
+</body>
+</html>
