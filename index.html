@@ -42,7 +42,8 @@
             max-width: 1000px;
             margin: auto;
             margin-bottom: 0px; /* Reduce bottom margin */
-            overflow: visible;
+            max-width: 100vw; /* Prevent overflow */
+            overflow-x: auto; /* Allow scrolling if needed */
         }
         .gallery img {
             width: 100%;
