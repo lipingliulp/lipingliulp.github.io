@@ -14,10 +14,9 @@
             display: flex;
             justify-content: space-around; /* Distributes space between items */
             align-items: center;
-            width: 100%;
-            max-width: 1200px;
             padding-bottom: 20px;
             margin: 0 auto; /* Center the top-row itself */
+	    width: max-content;
         }
 
         .controls {
@@ -25,23 +24,24 @@
             grid-template-columns: repeat(4, 1fr);
             grid-template-rows: repeat(2, 1fr);
             gap: 10px;
-            width: fit-content;
-            padding-left: 100px;
+            width: 500px;
+            min-width: 500px;
+            padding-left: 50px;
         }
 
         .iso-time {
-            padding-left: 0px;
+            padding-left: 50px;
         }        
         .gallery {
             display: grid;
-            grid-template-columns: repeat(5, 1fr);
+            grid-template-columns: auto repeat(4, 1fr);
             grid-template-rows: repeat(1, 1fr);
             gap: 0px;
-            justify-content: center;
+            justify-content: end;
             align-items: center;
             margin: auto;
             margin-bottom: 0px; /* Reduce bottom margin */
-            max-width: 1000px;
+	    width: max-content;
         }
         .gallery img {
             width: 100%;
@@ -56,10 +56,10 @@
             gap: 0px; /* Adjust for desired spacing */
             justify-content: center;
             align-items: center;
-            max-width: 1000px;
             margin: auto;
             margin-top: 0; /* Reduce bottom margin */
             margin-bottom: 0px; /* Reduce bottom margin */
+	    width: max-content;
         }
         .difference img {
             width: 100%;
