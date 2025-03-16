@@ -112,8 +112,8 @@
         // Get current time
         const nowDate = new Date(); 
         const nowChartDate = getChartDate(nowDate);
-        //const minAvailDate = new Date(Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate() - 10, 1, 0, 0, 0));
-        const minAvailDate = new Date(Date.UTC(2025, 2, 1, 1, 0, 0, 0));
+        const minAvailDate = new Date(Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth(), nowDate.getUTCDate() - 15, 1, 0, 0, 0));
+        //const minAvailDate = new Date(Date.UTC(2025, 2, 1, 1, 0, 0, 0));
         const maxAvailDate = getMaxAvailDate(nowDate);
 
 
